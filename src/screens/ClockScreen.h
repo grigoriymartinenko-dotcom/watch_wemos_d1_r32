@@ -37,10 +37,15 @@ private:
     int _lastTemp = -1000;
     int _lastHum  = -1000;
 
+    
+    // DHT manual refresh status
+bool _dhtLastOk = true;
+unsigned long _dhtMsgUntil = 0;
+
     void drawTop(const RtcDateTime& dt);
     void drawTime(const RtcDateTime& dt);
     void drawSeconds(const RtcDateTime& dt);
     void drawClimate(bool force = false);
-
+    void drawDhtStatus();
     const char* dowShort(uint8_t dow);
 };

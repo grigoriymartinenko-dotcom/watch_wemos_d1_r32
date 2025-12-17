@@ -36,31 +36,19 @@ void ClockScreen::begin() {
 void ClockScreen::update() {
     RtcDateTime now = _rtc.GetDateTime();
 
-    // ---- Night Mode AUTO logic ----
+    // --- Night mode ---
     bool autoNight = (now.Hour() >= 22 || now.Hour() < 7);
-
     switch (nightMode.state) {
-        case NightModeState::AUTO:
-            nightMode.isNight = autoNight;
-            break;
-        case NightModeState::ON:
-            nightMode.isNight = true;
-            break;
-        case NightModeState::OFF:
-            nightMode.isNight = false;
-            break;
+        case NightModeState::AUTO: nightMode.isNight = autoNight; break;
+        case NightModeState::ON:   nightMode.isNight = true;      break;
+        case NightModeState::OFF:  nightMode.isNight = false;     break;
     }
 
-    // ---- redraw on night switch ----
     if (_lastNight != nightMode.isNight) {
-        _tft.fillScreen(
-            nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY
-        );
+        _tft.fillScreen(nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY);
         _lastNight = nightMode.isNight;
         _lastDay = -1;
         _lastSec = -1;
-
-        // климат тоже нужно перерисовать
         _lastTemp = -1000;
         _lastHum  = -1000;
     }
@@ -78,38 +66,24 @@ void ClockScreen::update() {
     }
 
     drawClimate();
-/* ВНИЗ ФАЙЛА, в drawTime() или в конце update() */
-
-    /* ===== BUTTONS LINE ===== */
-    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
-    _tft.drawFastHLine(0, _tft.height() - 14, _tft.width(), C_GRAY_40);
-    _tft.setCursor(4, _tft.height() - 10);
-    _tft.setTextColor(C_GRAY_60, bg);
-    _tft.print("UP:weather   OK:settings");    
+    drawDhtStatus();
 }
 
-/* ================= DRAW TOP ================= */
+/* ================= TOP ================= */
 
 void ClockScreen::drawTop(const RtcDateTime& dt) {
     uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
     uint16_t fg = nightMode.isNight ? C_TIME_DATE_NIGHT : C_TIME_DATE_DAY;
 
     _tft.fillRect(0, 0, _tft.width(), 18, bg);
-
     _tft.setTextColor(fg);
     _tft.setCursor(2, 4);
-    _tft.print("WiFi");
+    _tft.print("Clock");
 
     _tft.setCursor(40, 4);
     _tft.printf("%s %02u.%02u.%04u",
         dowShort(dt.DayOfWeek()),
-        dt.Day(),
-        dt.Month(),
-        dt.Year()
-    );
-
-    _tft.setCursor(_tft.width() - 28, 4);
-    _tft.print("NTP");
+        dt.Day(), dt.Month(), dt.Year());
 
     _tft.drawFastHLine(0, 18, _tft.width(), C_GRAY_40);
 }
@@ -130,10 +104,8 @@ void ClockScreen::drawTime(const RtcDateTime& dt) {
 
     _tft.setCursor(x, y);
     _tft.printf("%02u", dt.Hour());
-
     _tft.setCursor(x + 44, y);
     _tft.print(_colonOn ? ":" : " ");
-
     _tft.setCursor(x + 58, y);
     _tft.printf("%02u", dt.Minute());
 
@@ -156,7 +128,7 @@ void ClockScreen::drawSeconds(const RtcDateTime& dt) {
     _tft.printf("%02u", dt.Second());
 }
 
-/* ================= CLIMATE (OPTIMIZED) ================= */
+/* ================= CLIMATE ================= */
 
 void ClockScreen::drawClimate(bool force) {
     if (isnan(dht.temperature())) return;
@@ -164,9 +136,7 @@ void ClockScreen::drawClimate(bool force) {
     int t = (int)dht.temperature();
     int h = (int)dht.humidity();
 
-    if (!force && t == _lastTemp && h == _lastHum) {
-        return; // ничего не изменилось
-    }
+    if (!force && t == _lastTemp && h == _lastHum) return;
 
     _lastTemp = t;
     _lastHum  = h;
@@ -175,21 +145,51 @@ void ClockScreen::drawClimate(bool force) {
     uint16_t fg = nightMode.isNight ? ST77XX_WHITE : ST77XX_BLACK;
 
     int y = 88;
-
-    // очистка зоны
     _tft.fillRect(0, y - 2, _tft.width(), 14, bg);
 
-    // температура
     _tft.drawBitmap(10, y, ICON_TEMP, 8, 8, ST77XX_RED);
     _tft.setTextColor(fg, bg);
     _tft.setCursor(22, y);
     _tft.printf("%dC", t);
 
-    // влажность
     _tft.drawBitmap(80, y, ICON_HUM, 8, 8, ST77XX_CYAN);
     _tft.setCursor(92, y);
     _tft.printf("%d%%", h);
 }
+
+/* ================= DHT STATUS ================= */
+
+void ClockScreen::drawDhtStatus() {
+    if (millis() > _dhtMsgUntil) return;
+
+    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
+    uint16_t fg = _dhtLastOk ? ST77XX_GREEN : ST77XX_RED;
+
+    _tft.fillRect(0, 104, _tft.width(), 12, bg);
+    _tft.setTextColor(fg, bg);
+    _tft.setCursor(4, 112);
+    _tft.print(_dhtLastOk ? "DHT OK" : "DHT ERR");
+}
+
+/* ================= BUTTONS ================= */
+
+void ClockScreen::onUp() {
+    if (_weather) _sm.set(_weather);
+}
+
+void ClockScreen::onDown() {
+    // РУЧНОЕ обновление DHT
+    bool ok = dht.update();
+    _dhtLastOk = ok;
+    _dhtMsgUntil = millis() + 2000; // показать 2 сек
+    drawClimate(true);
+}
+
+void ClockScreen::onOk() {
+    if (_settings) _sm.set(_settings);
+}
+
+void ClockScreen::onBack() {}
 
 /* ================= HELPERS ================= */
 
@@ -199,20 +199,3 @@ const char* ClockScreen::dowShort(uint8_t dow) {
     };
     return names[dow % 7];
 }
-
-/* ================= BUTTONS ================= */
-
-void ClockScreen::onUp() {
-    if (_weather) {
-        _sm.set(_weather);
-    }
-}
-void ClockScreen::onDown() {}
-
-void ClockScreen::onOk() {
-    if (_settings) {
-        _sm.set(_settings);
-    }
-}
-
-void ClockScreen::onBack() {}

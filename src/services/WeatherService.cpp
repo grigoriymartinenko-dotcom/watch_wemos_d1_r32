@@ -6,7 +6,7 @@
 static const char* OPENWEATHER_KEY = "07108cf067a5fdf5aa26dce75354400f";
 static const char* CITY = "Kharkiv";
 static const char* UNITS = "metric";
-static const char* LANG  = "en";   // <-- FIX: ASCII only
+static const char* LANG  = "en";
 
 static const unsigned long CACHE_MS = 15UL * 60UL * 1000UL;
 
@@ -22,18 +22,11 @@ const WeatherData& WeatherService::data() const {
 bool WeatherService::update() {
     unsigned long now = millis();
 
-    if (!WiFi.isConnected()) {
-        return false;
-    }
-
-    if (_data.valid && (now - _lastFetch < CACHE_MS)) {
-        return false;
-    }
+    if (!WiFi.isConnected()) return false;
+    if (_data.valid && (now - _lastFetch < CACHE_MS)) return false;
 
     bool ok = fetchFromApi();
-    if (ok) {
-        _lastFetch = now;
-    }
+    if (ok) _lastFetch = now;
     return ok;
 }
 
@@ -48,23 +41,24 @@ bool WeatherService::fetchFromApi() {
 
     http.begin(url);
     int code = http.GET();
-
     if (code != HTTP_CODE_OK) {
         http.end();
         return false;
     }
 
     StaticJsonDocument<1024> doc;
-    DeserializationError err = deserializeJson(doc, http.getStream());
+    if (deserializeJson(doc, http.getStream())) {
+        http.end();
+        return false;
+    }
     http.end();
 
-    if (err) return false;
-
-    _data.temp   = doc["main"]["temp"].as<float>();
+    _data.temp = doc["main"]["temp"].as<float>();
     _data.feels = doc["main"]["feels_like"].as<float>();
-    _data.desc  = doc["weather"][0]["description"].as<String>();
+    _data.weatherId = doc["weather"][0]["id"].as<uint16_t>();
+    _data.desc = doc["weather"][0]["description"].as<String>();
     _data.valid = true;
-    _data.ts    = millis();
+    _data.ts = millis();
 
     return true;
 }

@@ -2,11 +2,12 @@
 #include <Adafruit_ST7735.h>
 #include "core/Screen.h"
 #include "core/ScreenManager.h"
-#include "core/NightMode.h"
 
 class SettingsScreen : public Screen {
 public:
     SettingsScreen(Adafruit_ST7735& tft, ScreenManager& sm);
+
+    void setClock(Screen* clock);
 
     void begin() override;
     void update() override;
@@ -15,14 +16,13 @@ public:
     void onDown() override;
     void onOk() override;
     void onBack() override;
-Screen* _clock = nullptr;
-public:
-    void setClock(Screen* clock) { _clock = clock; }
+
 private:
     Adafruit_ST7735& _tft;
     ScreenManager& _sm;
+    Screen* _clock = nullptr;
 
-    int _modeIndex = 0; // 0=AUTO, 1=ON, 2=OFF
+    uint8_t _modeIndex = 0;
 
     void draw();
     const char* modeText() const;
