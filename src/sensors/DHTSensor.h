@@ -12,12 +12,9 @@ public:
     float temperature() const;
     float humidity() const;
 
-    // --- управление ПИФ ---
-    void setTempK(float k) { _kT = constrain(k, 0.01f, 1.0f); }
-    void setHumK (float k) { _kH = constrain(k, 0.01f, 1.0f); }
-
-    float tempK() const { return _kT; }
-    float humK () const { return _kH; }
+    // профили ПИФ
+    void setDayProfile();
+    void setNightProfile();
 
 private:
     DHT dht;
@@ -28,7 +25,11 @@ private:
     float _tF = NAN;
     float _hF = NAN;
 
-    // коэффициенты ПИФ
-    float _kT = 0.20f; // температура
-    float _kH = 0.15f; // влажность (чуть плавнее)
+    float _kT = 0.20f;
+    float _kH = 0.15f;
+
+    static constexpr float K_T_DAY   = 0.20f;
+    static constexpr float K_H_DAY   = 0.15f;
+    static constexpr float K_T_NIGHT = 0.10f;
+    static constexpr float K_H_NIGHT = 0.08f;
 };

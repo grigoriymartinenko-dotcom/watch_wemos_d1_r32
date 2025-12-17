@@ -1,4 +1,4 @@
-#include "DHTSensor.h"
+#include "sensors/DHTSensor.h"
 
 DHTSensor::DHTSensor(uint8_t pin, uint8_t type)
     : dht(pin, type) {}
@@ -11,14 +11,11 @@ bool DHTSensor::update() {
     float t = dht.readTemperature();
     float h = dht.readHumidity();
 
-    if (isnan(t) || isnan(h)) {
-        return false;
-    }
+    if (isnan(t) || isnan(h)) return false;
 
     _tRaw = t;
     _hRaw = h;
 
-    // инициализация фильтра первым валидным значением
     if (isnan(_tF)) _tF = _tRaw;
     else            _tF += _kT * (_tRaw - _tF);
 
@@ -34,4 +31,14 @@ float DHTSensor::temperature() const {
 
 float DHTSensor::humidity() const {
     return _hF;
+}
+
+void DHTSensor::setDayProfile() {
+    _kT = K_T_DAY;
+    _kH = K_H_DAY;
+}
+
+void DHTSensor::setNightProfile() {
+    _kT = K_T_NIGHT;
+    _kH = K_H_NIGHT;
 }
