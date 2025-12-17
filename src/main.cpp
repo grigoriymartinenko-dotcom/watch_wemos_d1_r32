@@ -12,6 +12,7 @@
 
 #include "sensors/DHTSensor.h"
 #include "services/WeatherService.h"
+#include "services/ForecastService.h"
 
 /* ================= BUTTONS ================= */
 #define BTN_UP     17
@@ -21,9 +22,9 @@
 
 /* ================= WIFI CREDS ================= */
 static const char* WIFI_SSID_1 = "grig";
-static const char* WIFI_PASS_1 = "magnetic";          // <-- впиши пароль сюда
-static const char* WIFI_SSID_2 = "gr";        // fallback (если нужно)
-static const char* WIFI_PASS_2 = "magnetic";          // <-- и тут (если нужно)
+static const char* WIFI_PASS_1 = "magnetic";
+static const char* WIFI_SSID_2 = "gr";
+static const char* WIFI_PASS_2 = "";
 
 /* ================= TFT ================= */
 #define TFT_CS   5
@@ -50,6 +51,7 @@ SettingsScreen settingsScreen(tft, screenManager);
 /* ================= SENSORS & SERVICES ================= */
 DHTSensor dht(25, DHT11);
 WeatherService weather;
+ForecastService forecast;
 
 /* ================= TIMERS ================= */
 unsigned long lastDhtRead = 0;
@@ -60,11 +62,15 @@ static bool lastNight = false;
 bool prevUp = HIGH, prevDown = HIGH, prevOk = HIGH, prevBack = HIGH;
 
 void setup() {
+
     pinMode(BTN_UP,   INPUT_PULLUP);
     pinMode(BTN_DOWN, INPUT_PULLUP);
     pinMode(BTN_OK,   INPUT_PULLUP);
     pinMode(BTN_BACK, INPUT_PULLUP);
 
+    Serial.begin(115200);
+delay(500);
+Serial.println("BOOT");
     tft.initR(INITR_BLACKTAB);
     tft.setRotation(1);
     tft.fillScreen(ST77XX_BLACK);
@@ -73,8 +79,8 @@ void setup() {
 
     dht.begin();
     weather.begin();
+    forecast.begin();
 
-    // Wi-Fi manager (фоновые попытки подключения)
     wifiManager.begin(WIFI_SSID_1, WIFI_PASS_1, WIFI_SSID_2, WIFI_PASS_2);
 
     clockScreen.setLinks(&weatherScreen, &settingsScreen);
@@ -87,10 +93,9 @@ void setup() {
 void loop() {
     unsigned long nowMs = millis();
 
-    // Wi-Fi (не блокирует, просто обслуживает состояние)
     wifiManager.update();
 
-    // DHT
+    // DHT periodic (и ручное по DOWN остаётся в ClockScreen)
     if (nowMs - lastDhtRead >= DHT_INTERVAL_MS) {
         lastDhtRead = nowMs;
         dht.update();
@@ -103,7 +108,7 @@ void loop() {
         lastNight = nightMode.isNight;
     }
 
-    // Buttons (edge detect)
+    // Buttons
     bool up    = digitalRead(BTN_UP);
     bool down  = digitalRead(BTN_DOWN);
     bool ok    = digitalRead(BTN_OK);
