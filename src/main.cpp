@@ -9,6 +9,12 @@
 #include "screens/SettingsScreen.h"
 #include "sensors/DHTSensor.h"
 
+/* ================= BUTTONS ================= */
+#define BTN_UP     17
+#define BTN_DOWN   16
+#define BTN_OK     22
+#define BTN_BACK   21
+
 /* ================= TFT ================= */
 #define TFT_CS   5
 #define TFT_DC   2
@@ -38,42 +44,75 @@ unsigned long lastDhtRead = 0;
 static const unsigned long DHT_INTERVAL_MS = 60000;
 static bool lastNight = false;
 
+/* ================= BUTTON STATE ================= */
+bool prevUp = HIGH, prevDown = HIGH, prevOk = HIGH, prevBack = HIGH;
+
 void setup() {
-    // --- TFT ---
+    /* --- GPIO --- */
+    pinMode(BTN_UP,   INPUT_PULLUP);
+    pinMode(BTN_DOWN, INPUT_PULLUP);
+    pinMode(BTN_OK,   INPUT_PULLUP);
+    pinMode(BTN_BACK, INPUT_PULLUP);
+
+    /* --- TFT --- */
     tft.initR(INITR_BLACKTAB);
     tft.setRotation(1);
     tft.fillScreen(ST77XX_BLACK);
 
-    // --- RTC ---
+    /* --- RTC --- */
     rtc.Begin();
 
-    // --- DHT ---
+    /* --- DHT --- */
     dht.begin();
 
+    /* --- links --- */
+    clockScreen.setLinks(&weatherScreen, &settingsScreen);
+    settingsScreen.setClock(&clockScreen);
 
-    // --- связываем экраны ---
-clockScreen.setLinks(&weatherScreen, &settingsScreen);
-settingsScreen.setClock(&clockScreen);
-
-screenManager.set(&clockScreen);   // стартовый экран
-    // --- АКТИВНЫЙ ЭКРАН (КРИТИЧНО) ---
-    //screenManager.set(&clockScreen);
+    /* --- start screen --- */
+    screenManager.set(&clockScreen);
 }
 
 void loop() {
     unsigned long nowMs = millis();
 
+    /* ===== DHT ===== */
     if (nowMs - lastDhtRead >= DHT_INTERVAL_MS) {
         lastDhtRead = nowMs;
         dht.update();
     }
 
-    // --- ПИФ профили ---
+    /* ===== PIF profile ===== */
     if (nightMode.isNight != lastNight) {
         nightMode.isNight ? dht.setNightProfile()
                           : dht.setDayProfile();
         lastNight = nightMode.isNight;
     }
 
+    /* ===== BUTTONS (edge-detect) ===== */
+    bool up    = digitalRead(BTN_UP);
+    bool down  = digitalRead(BTN_DOWN);
+    bool ok    = digitalRead(BTN_OK);
+    bool back  = digitalRead(BTN_BACK);
+
+    if (prevUp == HIGH && up == LOW) {
+        screenManager.onUp();
+    }
+    if (prevDown == HIGH && down == LOW) {
+        screenManager.onDown();
+    }
+    if (prevOk == HIGH && ok == LOW) {
+        screenManager.onOk();
+    }
+    if (prevBack == HIGH && back == LOW) {
+        screenManager.onBack();
+    }
+
+    prevUp = up;
+    prevDown = down;
+    prevOk = ok;
+    prevBack = back;
+
+    /* ===== UPDATE SCREEN ===== */
     screenManager.update();
 }
