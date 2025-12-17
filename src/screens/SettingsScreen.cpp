@@ -5,10 +5,6 @@ SettingsScreen::SettingsScreen(Adafruit_ST7735& tft, ScreenManager& sm)
     : _tft(tft), _sm(sm) {}
 
 void SettingsScreen::begin() {
-    _tft.fillScreen(ST77XX_BLUE);   // ← ЯВНЫЙ ТЕСТ
-    delay(200);
-
-    // дальше твой обычный код
     _tft.fillScreen(C_UI_BG_NIGHT);
 
     switch (nightMode.state) {
