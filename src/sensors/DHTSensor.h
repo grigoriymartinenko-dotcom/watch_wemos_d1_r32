@@ -12,14 +12,23 @@ public:
     float temperature() const;
     float humidity() const;
 
+    // --- управление ПИФ ---
+    void setTempK(float k) { _kT = constrain(k, 0.01f, 1.0f); }
+    void setHumK (float k) { _kH = constrain(k, 0.01f, 1.0f); }
+
+    float tempK() const { return _kT; }
+    float humK () const { return _kH; }
+
 private:
     DHT dht;
 
-    float t_raw = NAN;
-    float h_raw = NAN;
+    float _tRaw = NAN;
+    float _hRaw = NAN;
 
-    float t_f = NAN;
-    float h_f = NAN;
+    float _tF = NAN;
+    float _hF = NAN;
 
-    static constexpr float K = 0.2f; // ПИФ
+    // коэффициенты ПИФ
+    float _kT = 0.20f; // температура
+    float _kH = 0.15f; // влажность (чуть плавнее)
 };
