@@ -194,7 +194,11 @@ const char* ClockScreen::dowShort(uint8_t dow) {
 
 /* ================= BUTTONS ================= */
 
-void ClockScreen::onUp() {}
+void ClockScreen::onUp() {
+    if (_weather) {
+        _sm.set(_weather);
+    }
+}
 void ClockScreen::onDown() {}
 
 void ClockScreen::onOk() {

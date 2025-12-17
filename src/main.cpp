@@ -68,7 +68,7 @@ void setup() {
     /* --- links --- */
     clockScreen.setLinks(&weatherScreen, &settingsScreen);
     settingsScreen.setClock(&clockScreen);
-
+    weatherScreen.setClock(&clockScreen);
     /* --- start screen --- */
     screenManager.set(&clockScreen);
 }
