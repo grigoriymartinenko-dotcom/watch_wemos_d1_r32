@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
 #include <string.h>
 
 static const char* OPENWEATHER_KEY = "07108cf067a5fdf5aa26dce75354400f";
@@ -22,8 +23,9 @@ void ForecastService::resetData() {
     _data.valid = false;
     _data.count = 0;
     _data.ts = 0;
+
     for (int i = 0; i < 5; i++) {
-        memset(_data.days[i].date, 0, sizeof(_data.days[i].date));
+        _data.days[i].date[0] = '\0';
         _data.days[i].minTemp = 127;
         _data.days[i].maxTemp = -127;
         _data.days[i].nightTemp = 127;
@@ -32,35 +34,33 @@ void ForecastService::resetData() {
     }
 }
 
-bool ForecastService::parseDtTxt(const char* dt, char outDate[11], int& outHour) {
-    // dt format: "YYYY-MM-DD HH:MM:SS"
-    if (!dt || strlen(dt) < 13) return false;
-
-    // date
-    // copy first 10 chars
-    for (int i = 0; i < 10; i++) outDate[i] = dt[i];
-    outDate[10] = '\0';
-
-    // hour at positions 11-12
-    char hh[3] = { dt[11], dt[12], '\0' };
-    outHour = atoi(hh);
-    return true;
-}
-
 bool ForecastService::update(bool force) {
-    unsigned long now = millis();
+    Serial.println("[Forecast] update() called");
 
-    if (!WiFi.isConnected()) return false;
-
-    if (!force && _data.valid && (now - _lastFetch < CACHE_MS)) {
-        return false; // кэш валиден
+    if (!WiFi.isConnected()) {
+        Serial.println("[Forecast] WiFi NOT connected");
+        return false;
     }
 
+    unsigned long nowMs = millis();
+    if (!force && _data.valid && (nowMs - _lastFetch < CACHE_MS)) {
+        Serial.println("[Forecast] cache valid");
+        return false;
+    }
+
+    Serial.println("[Forecast] fetching from API...");
     bool ok = fetchFromApi();
-    if (ok) _lastFetch = now;
+
+    Serial.print("[Forecast] fetch result = ");
+    Serial.println(ok ? "OK" : "FAIL");
+
+    if (ok) _lastFetch = nowMs;
     return ok;
 }
 
+/* =========================================================
+ * CORE FETCH — НЕ ЗАВИСИТ ОТ ВРЕМЕНИ ESP32
+ * ========================================================= */
 bool ForecastService::fetchFromApi() {
     HTTPClient http;
 
@@ -72,68 +72,75 @@ bool ForecastService::fetchFromApi() {
 
     http.begin(url);
     int code = http.GET();
+
+    Serial.print("[Forecast] HTTP code: ");
+    Serial.println(code);
+
     if (code != HTTP_CODE_OK) {
         http.end();
         return false;
     }
 
-    // ⬆️ УВЕЛИЧЕН БУФЕР (КЛЮЧЕВО!)
     DynamicJsonDocument doc(48 * 1024);
-
     DeserializationError err = deserializeJson(doc, http.getStream());
     http.end();
 
     if (err) {
-        Serial.print("Forecast JSON error: ");
+        Serial.print("[Forecast] JSON error: ");
         Serial.println(err.c_str());
         return false;
     }
-    else {Serial.println("Forecast good: ");}
 
     resetData();
 
     JsonArray list = doc["list"].as<JsonArray>();
     if (list.isNull()) return false;
 
-    int bestDayDiff[5];   for (int i=0;i<5;i++) bestDayDiff[i] = 99;
-    int bestNightDiff[5]; for (int i=0;i<5;i++) bestNightDiff[i] = 99;
+    // timezone города (секунды)
+    int cityTz = doc["city"]["timezone"] | 0;
+
+    int bestDayDiff[5];   for (int i = 0; i < 5; i++) bestDayDiff[i] = 99;
+    int bestNightDiff[5]; for (int i = 0; i < 5; i++) bestNightDiff[i] = 99;
+
+    int baseYday = -1;
 
     for (JsonVariant v : list) {
-        const char* dt = v["dt_txt"] | nullptr;
+        time_t t = (time_t)(v["dt"].as<long>() + cityTz);
+        struct tm tm;
+        gmtime_r(&t, &tm);
 
-        char dateStr[11];
-        int hour = 0;
-        if (!parseDtTxt(dt, dateStr, hour)) continue;
+        if (baseYday < 0) baseYday = tm.tm_yday;
 
-        int dayIdx = -1;
-        for (int i = 0; i < _data.count; i++) {
-            if (strcmp(_data.days[i].date, dateStr) == 0) {
-                dayIdx = i;
-                break;
-            }
+        int dayIdx = tm.tm_yday - baseYday;
+        if (dayIdx < 0 || dayIdx >= 5) continue;
+
+        // первая инициализация дня
+        if (_data.days[dayIdx].date[0] == '\0') {
+            strftime(_data.days[dayIdx].date,
+                     sizeof(_data.days[dayIdx].date),
+                     "%Y-%m-%d", &tm);
+            if (_data.count < dayIdx + 1)
+                _data.count = dayIdx + 1;
         }
-        if (dayIdx == -1) {
-            if (_data.count >= 5) continue;
-            dayIdx = _data.count++;
-            strncpy(_data.days[dayIdx].date, dateStr, 11);
-        }
 
-        int8_t tMin = round(v["main"]["temp_min"].as<float>());
-        int8_t tMax = round(v["main"]["temp_max"].as<float>());
-        int8_t tCur = round(v["main"]["temp"].as<float>());
+        int8_t tMin = (int8_t)roundf(v["main"]["temp_min"].as<float>());
+        int8_t tMax = (int8_t)roundf(v["main"]["temp_max"].as<float>());
+        int8_t tCur = (int8_t)roundf(v["main"]["temp"].as<float>());
 
         uint16_t wid = v["weather"][0]["id"] | 804;
 
         if (tMin < _data.days[dayIdx].minTemp) _data.days[dayIdx].minTemp = tMin;
         if (tMax > _data.days[dayIdx].maxTemp) _data.days[dayIdx].maxTemp = tMax;
 
-        int dayDiff = abs(hour - 15);
+        // DAY ≈ 15:00
+        int dayDiff = abs(tm.tm_hour - 15);
         if (dayDiff < bestDayDiff[dayIdx]) {
             bestDayDiff[dayIdx] = dayDiff;
             _data.days[dayIdx].dayWeatherId = wid;
         }
 
-        int nightDiff = abs(hour - 3);
+        // NIGHT ≈ 03:00
+        int nightDiff = abs(tm.tm_hour - 3);
         if (nightDiff < bestNightDiff[dayIdx]) {
             bestNightDiff[dayIdx] = nightDiff;
             _data.days[dayIdx].nightWeatherId = wid;
@@ -141,12 +148,16 @@ bool ForecastService::fetchFromApi() {
         }
     }
 
+    // финализация
     for (int i = 0; i < _data.count; i++) {
-        if (_data.days[i].nightTemp == 127)
-            _data.days[i].nightTemp = (_data.days[i].minTemp + _data.days[i].maxTemp) / 2;
-
-        if (_data.days[i].dayWeatherId == 0)   _data.days[i].dayWeatherId = 804;
-        if (_data.days[i].nightWeatherId == 0) _data.days[i].nightWeatherId = 804;
+        if (_data.days[i].nightTemp == 127) {
+            _data.days[i].nightTemp =
+                (_data.days[i].minTemp + _data.days[i].maxTemp) / 2;
+        }
+        if (_data.days[i].dayWeatherId == 0)
+            _data.days[i].dayWeatherId = 804;
+        if (_data.days[i].nightWeatherId == 0)
+            _data.days[i].nightWeatherId = 804;
     }
 
     _data.valid = (_data.count > 0);
