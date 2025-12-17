@@ -26,6 +26,9 @@ void ClockScreen::begin() {
     _lastSec = -1;
     _lastDay = -1;
     _lastNight = false;
+
+    _lastTemp = -1000;
+    _lastHum  = -1000;
 }
 
 /* ================= UPDATE ================= */
@@ -56,6 +59,10 @@ void ClockScreen::update() {
         _lastNight = nightMode.isNight;
         _lastDay = -1;
         _lastSec = -1;
+
+        // климат тоже нужно перерисовать
+        _lastTemp = -1000;
+        _lastHum  = -1000;
     }
 
     if (now.Day() != _lastDay) {
@@ -141,22 +148,39 @@ void ClockScreen::drawSeconds(const RtcDateTime& dt) {
     _tft.printf("%02u", dt.Second());
 }
 
-/* ================= CLIMATE ================= */
+/* ================= CLIMATE (OPTIMIZED) ================= */
 
-void ClockScreen::drawClimate() {
+void ClockScreen::drawClimate(bool force) {
     if (isnan(dht.temperature())) return;
 
+    int t = (int)dht.temperature();
+    int h = (int)dht.humidity();
+
+    if (!force && t == _lastTemp && h == _lastHum) {
+        return; // ничего не изменилось
+    }
+
+    _lastTemp = t;
+    _lastHum  = h;
+
+    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
     uint16_t fg = nightMode.isNight ? ST77XX_WHITE : ST77XX_BLACK;
+
     int y = 88;
 
-    _tft.drawBitmap(10, y, ICON_TEMP, 8, 8, ST77XX_RED);
-    _tft.setTextColor(fg);
-    _tft.setCursor(22, y);
-    _tft.printf("%dC", (int)dht.temperature());
+    // очистка зоны
+    _tft.fillRect(0, y - 2, _tft.width(), 14, bg);
 
+    // температура
+    _tft.drawBitmap(10, y, ICON_TEMP, 8, 8, ST77XX_RED);
+    _tft.setTextColor(fg, bg);
+    _tft.setCursor(22, y);
+    _tft.printf("%dC", t);
+
+    // влажность
     _tft.drawBitmap(80, y, ICON_HUM, 8, 8, ST77XX_CYAN);
     _tft.setCursor(92, y);
-    _tft.printf("%d%%", (int)dht.humidity());
+    _tft.printf("%d%%", h);
 }
 
 /* ================= HELPERS ================= */
@@ -167,13 +191,11 @@ const char* ClockScreen::dowShort(uint8_t dow) {
     };
     return names[dow % 7];
 }
-void ClockScreen::onUp() {
-    // пока не используется
-}
 
-void ClockScreen::onDown() {
-    // пока не используется
-}
+/* ================= BUTTONS ================= */
+
+void ClockScreen::onUp() {}
+void ClockScreen::onDown() {}
 
 void ClockScreen::onOk() {
     if (_settings) {
@@ -181,6 +203,4 @@ void ClockScreen::onOk() {
     }
 }
 
-void ClockScreen::onBack() {
-    // пока не используется
-}
+void ClockScreen::onBack() {}

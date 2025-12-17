@@ -33,10 +33,14 @@ private:
     bool _colonOn = true;
     bool _lastNight = false;
 
+    // --- climate cache ---
+    int _lastTemp = -1000;
+    int _lastHum  = -1000;
+
     void drawTop(const RtcDateTime& dt);
     void drawTime(const RtcDateTime& dt);
     void drawSeconds(const RtcDateTime& dt);
-    void drawClimate();
+    void drawClimate(bool force = false);
 
     const char* dowShort(uint8_t dow);
 };
