@@ -39,8 +39,8 @@ private:
 
     
     // DHT manual refresh status
-bool _dhtLastOk = true;
-unsigned long _dhtMsgUntil = 0;
+    bool _dhtLastOk = true;
+    unsigned long _dhtMsgUntil = 0;
 
     void drawTop(const RtcDateTime& dt);
     void drawTime(const RtcDateTime& dt);
