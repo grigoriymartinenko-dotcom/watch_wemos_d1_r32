@@ -78,6 +78,14 @@ void ClockScreen::update() {
     }
 
     drawClimate();
+/* ВНИЗ ФАЙЛА, в drawTime() или в конце update() */
+
+    /* ===== BUTTONS LINE ===== */
+    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
+    _tft.drawFastHLine(0, _tft.height() - 14, _tft.width(), C_GRAY_40);
+    _tft.setCursor(4, _tft.height() - 10);
+    _tft.setTextColor(C_GRAY_60, bg);
+    _tft.print("UP:weather   OK:settings");    
 }
 
 /* ================= DRAW TOP ================= */
