@@ -15,23 +15,23 @@ bool DHTSensor::update() {
         return false;
     }
 
-    t_raw = t;
-    h_raw = h;
+    _tRaw = t;
+    _hRaw = h;
 
-    // --- ПИФ ---
-    if (isnan(t_f)) t_f = t_raw;
-    else            t_f += K * (t_raw - t_f);
+    // инициализация фильтра первым валидным значением
+    if (isnan(_tF)) _tF = _tRaw;
+    else            _tF += _kT * (_tRaw - _tF);
 
-    if (isnan(h_f)) h_f = h_raw;
-    else            h_f += K * (h_raw - h_f);
+    if (isnan(_hF)) _hF = _hRaw;
+    else            _hF += _kH * (_hRaw - _hF);
 
     return true;
 }
 
 float DHTSensor::temperature() const {
-    return t_f;
+    return _tF;
 }
 
 float DHTSensor::humidity() const {
-    return h_f;
+    return _hF;
 }
