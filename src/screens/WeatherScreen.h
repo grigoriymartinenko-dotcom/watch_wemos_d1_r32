@@ -18,9 +18,19 @@ public:
     void onBack() override;
 
 private:
+    enum class View {
+        NOW,
+        FORECAST
+    };
+
     Adafruit_ST7735& _tft;
     ScreenManager& _sm;
     Screen* _clock = nullptr;
 
+    View _view = View::NOW;
+    int  _dayIndex = 0;
+
     void draw();
+    void drawNow();
+    void drawForecast();
 };
