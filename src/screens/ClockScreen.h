@@ -30,6 +30,7 @@ private:
     ScreenManager& _manager;
     Screen* _forecast = nullptr;
 
+    int digitHalfWidth();
     int _lastSecond = -1;
     // время
     int _lastMinute = -1;

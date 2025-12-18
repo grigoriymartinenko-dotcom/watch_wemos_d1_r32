@@ -88,7 +88,7 @@ void setup() {
 
     /* --- StatusBar --- */
     statusBar.begin(tft);
-    statusBar.setRtc(StatusColor::OK);
+    statusBar.setNtp(StatusColor::OK);
 
     /* --- WiFi --- */
     WiFi.mode(WIFI_STA);

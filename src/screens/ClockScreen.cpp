@@ -1,7 +1,7 @@
 #include "screens/ClockScreen.h"
 #include <Fonts/FreeSansBold24pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
-
+#include <Fonts/FreeSansBold18pt7b.h>
 static const char* DOW[7] = {
     "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 };
@@ -89,31 +89,30 @@ void ClockScreen::onOk() {
 
 void ClockScreen::drawHoursMinutes(int hh, int mm) {
     char buf[3];
+    int shift = digitHalfWidth();  // 50% ширины символа
 
-    // очищаем строку времени
     _tft.fillRect(0, 20, _tft.width(), 50, ST77XX_BLACK);
 
-    _tft.setFont(&FreeSansBold24pt7b);
+    _tft.setFont(&FreeSansBold18pt7b);
     _tft.setTextColor(ST77XX_WHITE);
 
-    // HH
+    // ---- HH (сдвиг ВПРАВО) ----
     snprintf(buf, sizeof(buf), "%02d", hh);
-    _tft.setCursor(12, 60);
+    _tft.setCursor(23 + shift, 60);
     _tft.print(buf);
 
-    // MM
+    // ---- MM (сдвиг ВЛЕВО) ----
     snprintf(buf, sizeof(buf), "%02d", mm);
-    _tft.setCursor(96, 60);
+    _tft.setCursor(92 - shift, 60);
     _tft.print(buf);
 
     _tft.setFont(nullptr);
 }
-
 void ClockScreen::drawColon(bool visible) {
-    _tft.setFont(&FreeSansBold24pt7b);
+    _tft.setFont(&FreeSansBold18pt7b);
 
-    const int colonX = 72;
-    const int colonY = 60;
+    const int colonX = 73;
+    const int colonY = 56;
 
     if (visible) {
         _tft.setTextColor(ST77XX_WHITE);
@@ -191,13 +190,23 @@ void ClockScreen::drawSeconds(int ss) {
     char buf[3];
     snprintf(buf, sizeof(buf), "%02d", ss);
 
-    // зона секунд (справа от MM)
-    _tft.fillRect(130, 42, 30, 20, ST77XX_BLACK);
+    // зона секунд — выше и правее, как на старом UI
+    _tft.fillRect(125, 35, 30, 18, ST77XX_BLACK);
 
-    _tft.setFont(&FreeSans9pt7b);
-    _tft.setTextColor(ST77XX_WHITE);
-    _tft.setCursor(132, 58);
+    _tft.setFont(nullptr);
+    _tft.setTextColor(ST77XX_YELLOW);
+    _tft.setCursor(125, 35);
     _tft.print(buf);
 
     _tft.setFont(nullptr);
+}
+int ClockScreen::digitHalfWidth() {
+    int16_t x1, y1;
+    uint16_t w, h;
+
+    _tft.setFont(&FreeSansBold18pt7b);
+    _tft.getTextBounds("0", 0, 0, &x1, &y1, &w, &h);
+    _tft.setFont(nullptr);
+
+    return w / 2;
 }
