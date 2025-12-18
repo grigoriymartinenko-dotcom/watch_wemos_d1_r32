@@ -56,7 +56,7 @@ if (ss != _lastSecond) {
     if (mm != _lastMinute) {
         _lastMinute = mm;
         drawHoursMinutes(hh, mm);
-        drawDate(now);
+       
     }
 
     // 2️⃣ мигание ТОЛЬКО двоеточия

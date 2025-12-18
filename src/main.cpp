@@ -113,9 +113,9 @@ void setup() {
     /* --- Forecast service --- */
     forecast.begin();
     if (forecast.update(true))
-        statusBar.setApi(StatusColor::OK);
+        statusBar.setNtp(StatusColor::OK);
     else
-        statusBar.setApi(StatusColor::ERROR);
+        statusBar.setNtp(StatusColor::ERROR);
 
     /* --- Link screens --- */
     clockScreen.setForecastScreen(&forecastScreen);
@@ -139,8 +139,17 @@ void loop() {
 
     /* --- Services --- */
     if (forecast.update()) {
-        statusBar.setApi(StatusColor::OK);
+        statusBar.setNtp(StatusColor::OK);
     }
+
+    RtcDateTime now = rtc.GetDateTime();
+
+statusBar.setDate(
+    now.DayOfWeek(),
+    now.Day(),
+    now.Month(),
+    now.Year()
+);
 
     /* --- UI --- */
     statusBar.draw();
