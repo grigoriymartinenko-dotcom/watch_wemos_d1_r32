@@ -13,11 +13,15 @@ public:
 
     void setForecastScreen(Screen* s);
 
+    // улица + дом
+    void setOutdoorWeather(float tempC, int humidity);
+    void setIndoorWeather(float tempC, int humidity);
+
     void begin() override;
     void update() override;
     void onOk() override;
 
-    // на экране часов кнопки не рисуем
+    // кнопки не рисуем
     void drawButtons(Adafruit_ST7735&) override {}
 
 private:
@@ -26,12 +30,28 @@ private:
     ScreenManager& _manager;
     Screen* _forecast = nullptr;
 
-    // кеш последнего состояния
+    int _lastSecond = -1;
+    // время
     int _lastMinute = -1;
     bool _colonVisible = true;
     uint32_t _lastBlinkMs = 0;
 
-    void drawStatic();
-    void drawTime(int hh, int mm, bool colon);
+    // OUT
+    float _outTempC = 1000.0f;
+    int   _outHum   = -1;
+    float _lastOutTempC = 1000.0f;
+    int   _lastOutHum   = -1;
+
+    // IN
+    float _inTempC = 1000.0f;
+    int   _inHum   = -1;
+    float _lastInTempC = 1000.0f;
+    int   _lastInHum   = -1;
+
+    // draw helpers
+    void drawSeconds(int ss);
+    void drawHoursMinutes(int hh, int mm);
+    void drawColon(bool visible);
     void drawDate(const RtcDateTime& dt);
+    void drawWeather();
 };

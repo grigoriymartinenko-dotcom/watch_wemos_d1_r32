@@ -30,6 +30,9 @@ RtcDS1302<ThreeWire> rtc(myWire);
 #include "screens/ClockScreen.h"
 #include "screens/ForecastScreen.h"
 
+/* ================= UI ================= */
+#include "ui/StatusBar.h"
+
 /* ================= WIFI ================= */
 const char* WIFI_SSID = "grig";
 const char* WIFI_PASS = "magnetic";
@@ -48,6 +51,7 @@ const char* WIFI_PASS = "magnetic";
 /* ================= GLOBAL OBJECTS ================= */
 ScreenManager screenManager;
 ForecastService forecast;
+StatusBar statusBar;
 
 /* ================= SCREENS ================= */
 ClockScreen clockScreen(
@@ -60,7 +64,7 @@ ForecastScreen forecastScreen(
     tft,
     forecast,
     screenManager,
-    &clockScreen     // BACK → часы
+    &clockScreen
 );
 
 /* ================= SETUP ================= */
@@ -82,6 +86,10 @@ void setup() {
     /* --- RTC --- */
     rtc.Begin();
 
+    /* --- StatusBar --- */
+    statusBar.begin(tft);
+    statusBar.setRtc(StatusColor::OK);
+
     /* --- WiFi --- */
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -96,13 +104,18 @@ void setup() {
     if (WiFi.isConnected()) {
         Serial.print("WiFi OK, IP: ");
         Serial.println(WiFi.localIP());
+        statusBar.setWiFi(StatusColor::OK);
     } else {
         Serial.println("WiFi FAILED");
+        statusBar.setWiFi(StatusColor::ERROR);
     }
 
     /* --- Forecast service --- */
     forecast.begin();
-    forecast.update(true);
+    if (forecast.update(true))
+        statusBar.setApi(StatusColor::OK);
+    else
+        statusBar.setApi(StatusColor::ERROR);
 
     /* --- Link screens --- */
     clockScreen.setForecastScreen(&forecastScreen);
@@ -113,7 +126,7 @@ void setup() {
 
 /* ================= LOOP ================= */
 void loop() {
-    /* --- Buttons polling (simple debounce) --- */
+    /* --- Buttons polling (debounce) --- */
     static uint32_t lastBtnMs = 0;
     if (millis() - lastBtnMs > 150) {
         lastBtnMs = millis();
@@ -125,8 +138,11 @@ void loop() {
     }
 
     /* --- Services --- */
-    forecast.update();
+    if (forecast.update()) {
+        statusBar.setApi(StatusColor::OK);
+    }
 
-    /* --- Active screen --- */
+    /* --- UI --- */
+    statusBar.draw();
     screenManager.update();
 }
