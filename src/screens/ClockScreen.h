@@ -1,4 +1,5 @@
 #pragma once
+
 #include <Adafruit_ST7735.h>
 #include <RtcDS1302.h>
 #include "core/Screen.h"
@@ -10,14 +11,13 @@ public:
                 RtcDS1302<ThreeWire>& rtc,
                 ScreenManager& manager);
 
-    // связываем ForecastScreen ПОСЛЕ создания объектов
     void setForecastScreen(Screen* s);
 
     void begin() override;
     void update() override;
     void onOk() override;
 
-    // кнопки не рисуем
+    // на экране часов кнопки не рисуем
     void drawButtons(Adafruit_ST7735&) override {}
 
 private:
@@ -26,5 +26,12 @@ private:
     ScreenManager& _manager;
     Screen* _forecast = nullptr;
 
-    bool _redraw = true;
+    // кеш последнего состояния
+    int _lastMinute = -1;
+    bool _colonVisible = true;
+    uint32_t _lastBlinkMs = 0;
+
+    void drawStatic();
+    void drawTime(int hh, int mm, bool colon);
+    void drawDate(const RtcDateTime& dt);
 };
