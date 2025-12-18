@@ -1,201 +1,37 @@
 #include "screens/ClockScreen.h"
-#include <Fonts/FreeSansBold18pt7b.h>
-#include "ui/icons.h"
-#include "ui/Theme.h"
-#include "core/NightMode.h"
-#include "sensors/DHTSensor.h"
 
-extern DHTSensor dht;
+ClockScreen::ClockScreen(
+    Adafruit_ST7735& tft,
+    RtcDS1302<ThreeWire>& rtc,
+    ScreenManager& manager
+)
+: _tft(tft)
+, _rtc(rtc)
+, _manager(manager)
+{}
 
-/* ================= CONSTRUCTOR ================= */
-
-ClockScreen::ClockScreen(Adafruit_ST7735& tft,
-                         RtcDS1302<ThreeWire>& rtc,
-                         ScreenManager& sm)
-: _tft(tft), _rtc(rtc), _sm(sm) {}
-
-void ClockScreen::setLinks(Screen* weather, Screen* settings) {
-    _weather  = weather;
-    _settings = settings;
+void ClockScreen::setForecastScreen(Screen* s) {
+    _forecast = s;
 }
-
-/* ================= BEGIN ================= */
 
 void ClockScreen::begin() {
-    _tft.fillScreen(C_UI_BG_NIGHT);
-    _lastSec = -1;
-    _lastDay = -1;
-    _lastNight = false;
-
-    _lastTemp = -1000;
-    _lastHum  = -1000;
+    _redraw = true;
 }
-
-/* ================= UPDATE ================= */
 
 void ClockScreen::update() {
-    RtcDateTime now = _rtc.GetDateTime();
+    if (!_redraw) return;
 
-    // --- Night mode ---
-    bool autoNight = (now.Hour() >= 22 || now.Hour() < 7);
-    switch (nightMode.state) {
-        case NightModeState::AUTO: nightMode.isNight = autoNight; break;
-        case NightModeState::ON:   nightMode.isNight = true;      break;
-        case NightModeState::OFF:  nightMode.isNight = false;     break;
-    }
+    _tft.fillScreen(ST77XX_BLACK);
+    _tft.setTextSize(2);
+    _tft.setTextColor(ST77XX_WHITE);
+    _tft.setCursor(20, 40);
+    _tft.print("CLOCK");
 
-    if (_lastNight != nightMode.isNight) {
-        _tft.fillScreen(nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY);
-        _lastNight = nightMode.isNight;
-        _lastDay = -1;
-        _lastSec = -1;
-        _lastTemp = -1000;
-        _lastHum  = -1000;
-    }
-
-    if (now.Day() != _lastDay) {
-        drawTop(now);
-        _lastDay = now.Day();
-    }
-
-    if (now.Second() != _lastSec) {
-        _colonOn = !_colonOn;
-        drawTime(now);
-        drawSeconds(now);
-        _lastSec = now.Second();
-    }
-
-    drawClimate();
-    drawDhtStatus();
-}
-
-/* ================= TOP ================= */
-
-void ClockScreen::drawTop(const RtcDateTime& dt) {
-    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
-    uint16_t fg = nightMode.isNight ? C_TIME_DATE_NIGHT : C_TIME_DATE_DAY;
-
-    _tft.fillRect(0, 0, _tft.width(), 18, bg);
-    _tft.setTextColor(fg);
-    _tft.setCursor(2, 4);
-    _tft.print("Clock");
-
-    _tft.setCursor(40, 4);
-    _tft.printf("%s %02u.%02u.%04u",
-        dowShort(dt.DayOfWeek()),
-        dt.Day(), dt.Month(), dt.Year());
-
-    _tft.drawFastHLine(0, 18, _tft.width(), C_GRAY_40);
-}
-
-/* ================= TIME ================= */
-
-void ClockScreen::drawTime(const RtcDateTime& dt) {
-    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
-    uint16_t fg = nightMode.isNight ? C_TIME_MAIN_NIGHT : C_TIME_MAIN_DAY;
-
-    _tft.fillRect(0, 22, _tft.width(), 46, bg);
-
-    _tft.setFont(&FreeSansBold18pt7b);
-    _tft.setTextColor(fg, bg);
-
-    int x = 16;
-    int y = 58;
-
-    _tft.setCursor(x, y);
-    _tft.printf("%02u", dt.Hour());
-    _tft.setCursor(x + 44, y);
-    _tft.print(_colonOn ? ":" : " ");
-    _tft.setCursor(x + 58, y);
-    _tft.printf("%02u", dt.Minute());
-
-    _tft.setFont();
-    _tft.drawFastHLine(0, 72, _tft.width(), C_GRAY_40);
-}
-
-/* ================= SECONDS ================= */
-
-void ClockScreen::drawSeconds(const RtcDateTime& dt) {
-    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
-    uint16_t fg = nightMode.isNight ? C_TIME_SECONDS_NIGHT : C_TIME_SECONDS_DAY;
-
-    int x = 120;
-    int y = 36;
-
-    _tft.fillRect(x - 2, y - 2, 22, 14, bg);
-    _tft.setTextColor(fg, bg);
-    _tft.setCursor(x, y);
-    _tft.printf("%02u", dt.Second());
-}
-
-/* ================= CLIMATE ================= */
-
-void ClockScreen::drawClimate(bool force) {
-    if (isnan(dht.temperature())) return;
-
-    int t = (int)dht.temperature();
-    int h = (int)dht.humidity();
-
-    if (!force && t == _lastTemp && h == _lastHum) return;
-
-    _lastTemp = t;
-    _lastHum  = h;
-
-    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
-    uint16_t fg = nightMode.isNight ? ST77XX_WHITE : ST77XX_BLACK;
-
-    int y = 88;
-    _tft.fillRect(0, y - 2, _tft.width(), 14, bg);
-
-    _tft.drawBitmap(10, y, ICON_TEMP, 8, 8, ST77XX_RED);
-    _tft.setTextColor(fg, bg);
-    _tft.setCursor(22, y);
-    _tft.printf("%dC", t);
-
-    _tft.drawBitmap(80, y, ICON_HUM, 8, 8, ST77XX_CYAN);
-    _tft.setCursor(92, y);
-    _tft.printf("%d%%", h);
-}
-
-/* ================= DHT STATUS ================= */
-
-void ClockScreen::drawDhtStatus() {
-    if (millis() > _dhtMsgUntil) return;
-
-    uint16_t bg = nightMode.isNight ? C_UI_BG_NIGHT : C_UI_BG_DAY;
-    uint16_t fg = _dhtLastOk ? ST77XX_GREEN : ST77XX_RED;
-
-    _tft.fillRect(0, 104, _tft.width(), 12, bg);
-    _tft.setTextColor(fg, bg);
-    _tft.setCursor(4, 112);
-    _tft.print(_dhtLastOk ? "DHT OK" : "DHT ERR");
-}
-
-/* ================= BUTTONS ================= */
-
-void ClockScreen::onUp() {
-    if (_weather) _sm.set(_weather);
-}
-
-void ClockScreen::onDown() {
-    // РУЧНОЕ обновление DHT
-    bool ok = dht.update();
-    _dhtLastOk = ok;
-    _dhtMsgUntil = millis() + 2000; // показать 2 сек
-    drawClimate(true);
+    _redraw = false;
 }
 
 void ClockScreen::onOk() {
-    if (_settings) _sm.set(_settings);
-}
-
-void ClockScreen::onBack() {}
-
-/* ================= HELPERS ================= */
-
-const char* ClockScreen::dowShort(uint8_t dow) {
-    static const char* names[] = {
-        "Sun","Mon","Tue","Wed","Thu","Fri","Sat"
-    };
-    return names[dow % 7];
+    if (_forecast) {
+        _manager.set(_forecast);
+    }
 }

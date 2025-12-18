@@ -8,44 +8,23 @@ class ClockScreen : public Screen {
 public:
     ClockScreen(Adafruit_ST7735& tft,
                 RtcDS1302<ThreeWire>& rtc,
-                ScreenManager& sm);
+                ScreenManager& manager);
 
-    void setLinks(Screen* weather, Screen* settings);
+    // связываем ForecastScreen ПОСЛЕ создания объектов
+    void setForecastScreen(Screen* s);
 
     void begin() override;
     void update() override;
-
-    void onUp() override;
-    void onDown() override;
     void onOk() override;
-    void onBack() override;
+
+    // кнопки не рисуем
+    void drawButtons(Adafruit_ST7735&) override {}
 
 private:
     Adafruit_ST7735& _tft;
     RtcDS1302<ThreeWire>& _rtc;
-    ScreenManager& _sm;
+    ScreenManager& _manager;
+    Screen* _forecast = nullptr;
 
-    Screen* _weather  = nullptr;
-    Screen* _settings = nullptr;
-
-    int  _lastSec = -1;
-    int  _lastDay = -1;
-    bool _colonOn = true;
-    bool _lastNight = false;
-
-    // --- climate cache ---
-    int _lastTemp = -1000;
-    int _lastHum  = -1000;
-
-    
-    // DHT manual refresh status
-    bool _dhtLastOk = true;
-    unsigned long _dhtMsgUntil = 0;
-
-    void drawTop(const RtcDateTime& dt);
-    void drawTime(const RtcDateTime& dt);
-    void drawSeconds(const RtcDateTime& dt);
-    void drawClimate(bool force = false);
-    void drawDhtStatus();
-    const char* dowShort(uint8_t dow);
+    bool _redraw = true;
 };

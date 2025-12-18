@@ -91,76 +91,89 @@ bool ForecastService::fetchFromApi() {
         return false;
     }
 
-    resetData();
-
     JsonArray list = doc["list"].as<JsonArray>();
-    if (list.isNull()) return false;
+    if (list.isNull() || list.size() == 0) {
+        Serial.println("[Forecast] list empty");
+        return false;
+    }
 
-    // timezone города (секунды)
+    // ─── ВРЕМЕННЫЕ ДАННЫЕ ─────────────────────────────
+    ForecastData tmp;
+    memset(&tmp, 0, sizeof(tmp));
+    tmp.count = 0;
+
+    for (int i = 0; i < 5; i++) {
+        tmp.days[i].minTemp = 127;
+        tmp.days[i].maxTemp = -127;
+        tmp.days[i].nightTemp = 127;
+    }
+
     int cityTz = doc["city"]["timezone"] | 0;
+    int baseDay = -1;
 
-    int bestDayDiff[5];   for (int i = 0; i < 5; i++) bestDayDiff[i] = 99;
-    int bestNightDiff[5]; for (int i = 0; i < 5; i++) bestNightDiff[i] = 99;
-
-    int baseYday = -1;
+    int bestDayDiff[5];   memset(bestDayDiff, 99, sizeof(bestDayDiff));
+    int bestNightDiff[5]; memset(bestNightDiff, 99, sizeof(bestNightDiff));
 
     for (JsonVariant v : list) {
         time_t t = (time_t)(v["dt"].as<long>() + cityTz);
         struct tm tm;
         gmtime_r(&t, &tm);
 
-        if (baseYday < 0) baseYday = tm.tm_yday;
+        if (baseDay < 0)
+            baseDay = tm.tm_mday;
 
-        int dayIdx = tm.tm_yday - baseYday;
+        int dayIdx = tm.tm_mday - baseDay;
         if (dayIdx < 0 || dayIdx >= 5) continue;
 
-        // первая инициализация дня
-        if (_data.days[dayIdx].date[0] == '\0') {
-            strftime(_data.days[dayIdx].date,
-                     sizeof(_data.days[dayIdx].date),
+        if (tmp.days[dayIdx].date[0] == '\0') {
+            strftime(tmp.days[dayIdx].date,
+                     sizeof(tmp.days[dayIdx].date),
                      "%Y-%m-%d", &tm);
-            if (_data.count < dayIdx + 1)
-                _data.count = dayIdx + 1;
+            if (tmp.count < dayIdx + 1)
+                tmp.count = dayIdx + 1;
         }
 
-        int8_t tMin = (int8_t)roundf(v["main"]["temp_min"].as<float>());
-        int8_t tMax = (int8_t)roundf(v["main"]["temp_max"].as<float>());
-        int8_t tCur = (int8_t)roundf(v["main"]["temp"].as<float>());
+        int8_t tMin = roundf(v["main"]["temp_min"].as<float>());
+        int8_t tMax = roundf(v["main"]["temp_max"].as<float>());
+        int8_t tCur = roundf(v["main"]["temp"].as<float>());
 
         uint16_t wid = v["weather"][0]["id"] | 804;
 
-        if (tMin < _data.days[dayIdx].minTemp) _data.days[dayIdx].minTemp = tMin;
-        if (tMax > _data.days[dayIdx].maxTemp) _data.days[dayIdx].maxTemp = tMax;
+        if (tMin < tmp.days[dayIdx].minTemp) tmp.days[dayIdx].minTemp = tMin;
+        if (tMax > tmp.days[dayIdx].maxTemp) tmp.days[dayIdx].maxTemp = tMax;
 
-        // DAY ≈ 15:00
         int dayDiff = abs(tm.tm_hour - 15);
         if (dayDiff < bestDayDiff[dayIdx]) {
             bestDayDiff[dayIdx] = dayDiff;
-            _data.days[dayIdx].dayWeatherId = wid;
+            tmp.days[dayIdx].dayWeatherId = wid;
         }
 
-        // NIGHT ≈ 03:00
         int nightDiff = abs(tm.tm_hour - 3);
         if (nightDiff < bestNightDiff[dayIdx]) {
             bestNightDiff[dayIdx] = nightDiff;
-            _data.days[dayIdx].nightWeatherId = wid;
-            _data.days[dayIdx].nightTemp = tCur;
+            tmp.days[dayIdx].nightWeatherId = wid;
+            tmp.days[dayIdx].nightTemp = tCur;
         }
     }
 
-    // финализация
-    for (int i = 0; i < _data.count; i++) {
-        if (_data.days[i].nightTemp == 127) {
-            _data.days[i].nightTemp =
-                (_data.days[i].minTemp + _data.days[i].maxTemp) / 2;
-        }
-        if (_data.days[i].dayWeatherId == 0)
-            _data.days[i].dayWeatherId = 804;
-        if (_data.days[i].nightWeatherId == 0)
-            _data.days[i].nightWeatherId = 804;
+    if (tmp.count == 0) {
+        Serial.println("[Forecast] no valid days parsed");
+        return false;
     }
 
-    _data.valid = (_data.count > 0);
+    for (int i = 0; i < tmp.count; i++) {
+        if (tmp.days[i].nightTemp == 127)
+            tmp.days[i].nightTemp =
+                (tmp.days[i].minTemp + tmp.days[i].maxTemp) / 2;
+        if (tmp.days[i].dayWeatherId == 0)
+            tmp.days[i].dayWeatherId = 804;
+        if (tmp.days[i].nightWeatherId == 0)
+            tmp.days[i].nightWeatherId = 804;
+    }
+
+    // ─── КОММИТ ДАННЫХ ───────────────────────────────
+    _data = tmp;
+    _data.valid = true;
     _data.ts = millis();
-    return _data.valid;
+    return true;
 }

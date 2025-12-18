@@ -1,30 +1,10 @@
 #include <Arduino.h>
+#include <SPI.h>
+#include <WiFi.h>
+
+#include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <RtcDS1302.h>
-
-#include "core/ScreenManager.h"
-#include "core/NightMode.h"
-#include "core/WiFiManager.h"
-
-#include "screens/ClockScreen.h"
-#include "screens/WeatherScreen.h"
-#include "screens/SettingsScreen.h"
-
-#include "sensors/DHTSensor.h"
-#include "services/WeatherService.h"
-#include "services/ForecastService.h"
-
-/* ================= BUTTONS ================= */
-#define BTN_UP     17
-#define BTN_DOWN   16
-#define BTN_OK     22
-#define BTN_BACK   21
-
-/* ================= WIFI CREDS ================= */
-static const char* WIFI_SSID_1 = "grig";
-static const char* WIFI_PASS_1 = "magnetic";
-static const char* WIFI_SSID_2 = "gr";
-static const char* WIFI_PASS_2 = "";
 
 /* ================= TFT ================= */
 #define TFT_CS   5
@@ -40,86 +20,113 @@ ThreeWire myWire(RTC_DAT, RTC_CLK, RTC_RST);
 RtcDS1302<ThreeWire> rtc(myWire);
 
 /* ================= CORE ================= */
-ScreenManager screenManager;
-WiFiManager wifiManager;
+#include "core/Screen.h"
+#include "core/ScreenManager.h"
+
+/* ================= SERVICES ================= */
+#include "services/ForecastService.h"
 
 /* ================= SCREENS ================= */
-ClockScreen    clockScreen(tft, rtc, screenManager);
-WeatherScreen  weatherScreen(tft, screenManager);
-SettingsScreen settingsScreen(tft, screenManager);
+#include "screens/ClockScreen.h"
+#include "screens/ForecastScreen.h"
 
-/* ================= SENSORS & SERVICES ================= */
-DHTSensor dht(25, DHT11);
-WeatherService weather;
+/* ================= WIFI ================= */
+const char* WIFI_SSID = "grig";
+const char* WIFI_PASS = "magnetic";
+
+/* ================= BUTTONS =================
+ * BTN1 = UP    GPIO17
+ * BTN2 = DOWN  GPIO16
+ * BTN3 = OK    GPIO22
+ * BTN4 = BACK  GPIO21
+ */
+#define BTN_UP     17
+#define BTN_DOWN   16
+#define BTN_OK     22
+#define BTN_BACK   21
+
+/* ================= GLOBAL OBJECTS ================= */
+ScreenManager screenManager;
 ForecastService forecast;
 
-/* ================= TIMERS ================= */
-unsigned long lastDhtRead = 0;
-static const unsigned long DHT_INTERVAL_MS = 60000;
-static bool lastNight = false;
+/* ================= SCREENS ================= */
+ClockScreen clockScreen(
+    tft,
+    rtc,
+    screenManager
+);
 
-/* ================= BUTTON STATE ================= */
-bool prevUp = HIGH, prevDown = HIGH, prevOk = HIGH, prevBack = HIGH;
+ForecastScreen forecastScreen(
+    tft,
+    forecast,
+    screenManager,
+    &clockScreen     // BACK → часы
+);
 
+/* ================= SETUP ================= */
 void setup() {
+    Serial.begin(115200);
+    delay(200);
 
+    /* --- Buttons --- */
     pinMode(BTN_UP,   INPUT_PULLUP);
     pinMode(BTN_DOWN, INPUT_PULLUP);
     pinMode(BTN_OK,   INPUT_PULLUP);
     pinMode(BTN_BACK, INPUT_PULLUP);
 
-    Serial.begin(115200);
-delay(500);
-Serial.println("BOOT");
+    /* --- TFT --- */
     tft.initR(INITR_BLACKTAB);
     tft.setRotation(1);
     tft.fillScreen(ST77XX_BLACK);
 
+    /* --- RTC --- */
     rtc.Begin();
 
-    dht.begin();
-    weather.begin();
+    /* --- WiFi --- */
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+    Serial.print("WiFi connecting");
+    for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; i++) {
+        delay(300);
+        Serial.print(".");
+    }
+    Serial.println();
+
+    if (WiFi.isConnected()) {
+        Serial.print("WiFi OK, IP: ");
+        Serial.println(WiFi.localIP());
+    } else {
+        Serial.println("WiFi FAILED");
+    }
+
+    /* --- Forecast service --- */
     forecast.begin();
+    forecast.update(true);
 
-    wifiManager.begin(WIFI_SSID_1, WIFI_PASS_1, WIFI_SSID_2, WIFI_PASS_2);
+    /* --- Link screens --- */
+    clockScreen.setForecastScreen(&forecastScreen);
 
-    clockScreen.setLinks(&weatherScreen, &settingsScreen);
-    settingsScreen.setClock(&clockScreen);
-    weatherScreen.setClock(&clockScreen);
-
+    /* --- Start screen --- */
     screenManager.set(&clockScreen);
 }
 
+/* ================= LOOP ================= */
 void loop() {
-    unsigned long nowMs = millis();
+    /* --- Buttons polling (simple debounce) --- */
+    static uint32_t lastBtnMs = 0;
+    if (millis() - lastBtnMs > 150) {
+        lastBtnMs = millis();
 
-    wifiManager.update();
-
-    // DHT periodic (и ручное по DOWN остаётся в ClockScreen)
-    if (nowMs - lastDhtRead >= DHT_INTERVAL_MS) {
-        lastDhtRead = nowMs;
-        dht.update();
+        if (!digitalRead(BTN_UP))   screenManager.onUp();
+        if (!digitalRead(BTN_DOWN)) screenManager.onDown();
+        if (!digitalRead(BTN_OK))   screenManager.onOk();
+        if (!digitalRead(BTN_BACK)) screenManager.onBack();
     }
 
-    // PIF profile
-    if (nightMode.isNight != lastNight) {
-        nightMode.isNight ? dht.setNightProfile()
-                          : dht.setDayProfile();
-        lastNight = nightMode.isNight;
-    }
+    /* --- Services --- */
+    forecast.update();
 
-    // Buttons
-    bool up    = digitalRead(BTN_UP);
-    bool down  = digitalRead(BTN_DOWN);
-    bool ok    = digitalRead(BTN_OK);
-    bool back  = digitalRead(BTN_BACK);
-
-    if (prevUp == HIGH && up == LOW)       screenManager.onUp();
-    if (prevDown == HIGH && down == LOW)  screenManager.onDown();
-    if (prevOk == HIGH && ok == LOW)      screenManager.onOk();
-    if (prevBack == HIGH && back == LOW)  screenManager.onBack();
-
-    prevUp = up; prevDown = down; prevOk = ok; prevBack = back;
-
+    /* --- Active screen --- */
     screenManager.update();
 }
